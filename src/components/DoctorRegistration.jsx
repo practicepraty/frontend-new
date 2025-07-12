@@ -203,29 +203,38 @@ const DoctorRegistration = () => {
             const formDataToSubmit = new FormData();
             
             // Personal Information
-            formDataToSubmit.append('personalInfo[title]', formData.title);
-            formDataToSubmit.append('personalInfo[firstName]', formData.firstName);
-            formDataToSubmit.append('personalInfo[lastName]', formData.lastName);
-            formDataToSubmit.append('personalInfo[professionalEmail]', formData.professionalEmail);
-            formDataToSubmit.append('personalInfo[phone]', formData.phone);
-            formDataToSubmit.append('personalInfo[dateOfBirth]', formData.dateOfBirth);
-            formDataToSubmit.append('personalInfo[gender]', formData.gender);
+            formDataToSubmit.append('title', formData.title);
+            formDataToSubmit.append('firstName', formData.firstName);
+            formDataToSubmit.append('lastName', formData.lastName);
+            formDataToSubmit.append('professionalEmail', formData.professionalEmail);
+            formDataToSubmit.append('phone', formData.phone);
+            formDataToSubmit.append('dateOfBirth', formData.dateOfBirth);
+            formDataToSubmit.append('gender', formData.gender);
             
             // Professional Information
-            formDataToSubmit.append('professionalInfo[specialty]', formData.specialty);
-            formDataToSubmit.append('professionalInfo[subSpecialty]', formData.subSpecialty || '');
-            formDataToSubmit.append('professionalInfo[licenseNumber]', formData.licenseNumber);
-            formDataToSubmit.append('professionalInfo[licenseState]', formData.licenseState);
-            formDataToSubmit.append('professionalInfo[yearsOfExperience]', formData.yearsOfExperience);
-            formDataToSubmit.append('professionalInfo[medicalSchool]', formData.medicalSchool);
+            formDataToSubmit.append('specialty', formData.specialty);
+            formDataToSubmit.append('subSpecialty', formData.subSpecialty || '');
+            formDataToSubmit.append('licenseNumber', formData.licenseNumber);
+            formDataToSubmit.append('licenseState', formData.licenseState);
+            formDataToSubmit.append('yearsOfExperience', formData.yearsOfExperience);
+            formDataToSubmit.append('medicalSchool', formData.medicalSchool);
+            formDataToSubmit.append('degreeType', formData.degreeType);
+            formDataToSubmit.append('postGraduation', formData.postGraduation);
+            formDataToSubmit.append('boardCertifications', formData.boardCertifications || '');
             
             // Practice Information
-            formDataToSubmit.append('practiceInfo[practiceType]', formData.practiceType);
-            formDataToSubmit.append('practiceInfo[institutionName]', formData.institutionName);
-            formDataToSubmit.append('practiceInfo[address][street]', formData.address.street);
-            formDataToSubmit.append('practiceInfo[address][city]', formData.address.city);
-            formDataToSubmit.append('practiceInfo[address][state]', formData.address.state);
-            formDataToSubmit.append('practiceInfo[address][zipCode]', formData.address.zipCode);
+            formDataToSubmit.append('practiceType', formData.practiceType);
+            formDataToSubmit.append('institutionName', formData.institutionName);
+            formDataToSubmit.append('street', formData.address.street);
+            formDataToSubmit.append('city', formData.address.city);
+            formDataToSubmit.append('state', formData.address.state);
+            formDataToSubmit.append('zipCode', formData.address.zipCode);
+            formDataToSubmit.append('country', formData.address.country || '');
+            formDataToSubmit.append('latitude', formData.address.latitude || '');
+            formDataToSubmit.append('longitude', formData.address.longitude || '');
+            formDataToSubmit.append('officeHours', formData.officeHours || '');
+            formDataToSubmit.append('languages', formData.languages || '');
+            formDataToSubmit.append('insuranceAccepted', formData.insuranceAccepted || '');
             
             // Account Security
             formDataToSubmit.append('password', formData.password);
