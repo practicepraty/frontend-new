@@ -38,20 +38,12 @@ class AIService {
             }
 
             const formData = new FormData();
-            // Try common audio field names that backends expect
-            formData.append('audioFile', audioFile); // Changed from 'audio' to 'audioFile'
-            formData.append('file', audioFile); // Also add 'file' as backup
-            
-            // Add metadata to help backend process the file
-            formData.append('fileName', audioFile.name);
-            formData.append('fileSize', audioFile.size.toString());
-            formData.append('mimeType', audioFile.type);
+            formData.append('audioFile', audioFile);
             
             console.log('Uploading audio file:', {
                 name: audioFile.name,
                 size: audioFile.size,
-                type: audioFile.type,
-                fieldNames: ['audioFile', 'file']
+                type: audioFile.type
             });
 
             const result = await apiService.makeRequest('/api/v1/processing/process-audio', {

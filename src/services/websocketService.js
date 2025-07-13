@@ -6,7 +6,7 @@ class WebSocketService {
         this.reconnectInterval = 1000;
         this.listeners = new Map();
         this.connectionState = 'disconnected';
-        this.baseUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8002';
+        this.baseUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8005';
     }
 
     connect(requestId) {
