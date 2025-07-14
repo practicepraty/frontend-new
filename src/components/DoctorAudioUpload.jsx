@@ -1,8 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Upload, FileText, Play, Pause, RotateCcw, Send, Stethoscope, Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
+import { Mic, Upload, FileText, Play, Pause, RotateCcw, Send, Stethoscope, Sparkles, AlertCircle, CheckCircle, ArrowRight, Edit3, X } from 'lucide-react';
 import AIProgressIndicator from './AIProgressIndicator.jsx';
 import ProcessingStatusIndicator from './ProcessingStatusIndicator.jsx';
+import WebsitePreview from './WebsitePreview.jsx';
+import ContentManager from './ContentManager.jsx';
 import aiService from '../services/aiService.js';
+import previewService from '../services/previewService.js';
+import contentService from '../services/contentService.js';
+import apiService from '../utils/api.js';
+import { formatProcessingResultForPreview } from '../utils/previewUtils.js';
 
 export default function DoctorAudioUpload() {
     const [activeTab, setActiveTab] = useState('audio');
@@ -20,6 +26,13 @@ export default function DoctorAudioUpload() {
     const [audioLevel, setAudioLevel] = useState(0);
     const [_isRecordingSupported, setIsRecordingSupported] = useState(true);
     const [audioUrl, setAudioUrl] = useState(null);
+    const [showPreview, setShowPreview] = useState(false);
+    const [previewData, setPreviewData] = useState(null);
+    const [previewError, setPreviewError] = useState(null);
+    const [showContentManager, setShowContentManager] = useState(false);
+    const [contentData, setContentData] = useState(null);
+    const [websiteId, setWebsiteId] = useState(null);
+    const [websiteData, setWebsiteData] = useState(null);
 
     const fileInputRef = useRef(null);
     const audioRef = useRef(null);
@@ -363,6 +376,138 @@ export default function DoctorAudioUpload() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
+    const handlePreviewGeneration = (processingResult) => {
+        try {
+            // Format the processing result for preview
+            const formattedData = formatProcessingResultForPreview(processingResult);
+            
+            if (formattedData) {
+                // Use previewService to further format the data
+                const previewData = previewService.formatWebsiteData(formattedData);
+                
+                console.log('Generated preview data:', previewData);
+                setPreviewData(previewData);
+                setShowPreview(true);
+                setPreviewError(null);
+            } else {
+                console.error('Failed to format processing result for preview');
+                setPreviewError('Failed to generate preview from processing result');
+            }
+        } catch (error) {
+            console.error('Error generating preview:', error);
+            setPreviewError('Error generating website preview: ' + error.message);
+        }
+    };
+
+    const handlePreviewRefresh = async () => {
+        if (websiteId) {
+            try {
+                console.log('Refreshing preview from backend...');
+                const response = await apiService.getPreviewData(websiteId, { 
+                    deviceType: 'desktop', 
+                    zoom: 100 
+                });
+                setPreviewData(response.data);
+                setPreviewError(null);
+            } catch (error) {
+                console.error('Error refreshing preview:', error);
+                setPreviewError('Error refreshing preview: ' + apiService.handleAPIError(error));
+            }
+        } else if (processingResult && processingResult.data) {
+            try {
+                console.log('Refreshing preview from local data...');
+                handlePreviewGeneration(processingResult);
+            } catch (error) {
+                console.error('Error refreshing preview:', error);
+                setPreviewError('Error refreshing preview: ' + error.message);
+            }
+        }
+    };
+
+    // Content management handlers
+    const handleContentChange = async (updatedContent) => {
+        setContentData(updatedContent);
+        
+        // Update backend if websiteId exists
+        if (websiteId && updatedContent) {
+            try {
+                const websiteData = contentService.transformToWebsiteData(updatedContent);
+                await apiService.updateContent(websiteId, websiteData);
+                console.log('Content updated in backend');
+                
+                // Refresh preview
+                await handlePreviewRefresh();
+            } catch (error) {
+                console.error('Failed to update content in backend:', error);
+            }
+        } else if (updatedContent) {
+            // Fallback to local preview update
+            const websiteData = contentService.transformToWebsiteData(updatedContent);
+            const formattedData = formatProcessingResultForPreview({ data: websiteData });
+            if (formattedData) {
+                const previewData = previewService.formatWebsiteData(formattedData);
+                setPreviewData(previewData);
+            }
+        }
+    };
+
+    const handleContentSave = async (contentData) => {
+        try {
+            console.log('Saving content changes...');
+            
+            if (websiteId) {
+                // Save to backend
+                const websiteData = contentService.transformToWebsiteData(contentData);
+                await apiService.saveWebsite(websiteId, { content: websiteData });
+                console.log('Content saved to backend successfully');
+            } else {
+                // Fallback to local update
+                const websiteData = contentService.transformToWebsiteData(contentData);
+                setProcessingResult(prev => ({
+                    ...prev,
+                    data: websiteData
+                }));
+                console.log('Content saved locally');
+            }
+        } catch (error) {
+            console.error('Error saving content:', apiService.handleAPIError(error));
+            throw error;
+        }
+    };
+
+    const handleSectionUpdate = async (sectionId, content) => {
+        if (!websiteId) return;
+        
+        try {
+            const response = await apiService.updateContentSection(websiteId, sectionId, content);
+            
+            // Update local state
+            setWebsiteData(prev => ({
+                ...prev,
+                content: {
+                    ...prev.content,
+                    [sectionId]: response.data.content
+                }
+            }));
+            
+            // Trigger preview refresh
+            await handlePreviewRefresh();
+        } catch (error) {
+            console.error(`Failed to update ${sectionId} section:`, apiService.handleAPIError(error));
+            throw error;
+        }
+    };
+
+    const handleShowContentManager = () => {
+        if (processingResult && processingResult.data) {
+            setShowContentManager(true);
+        }
+    };
+
+    const handleCloseContentManager = () => {
+        setShowContentManager(false);
+    };
+
     const validateAudioFile = async (file) => {
         const errors = [];
         
@@ -494,10 +639,10 @@ export default function DoctorAudioUpload() {
                         setProcessingResult(result);
                         setIsProcessing(false);
                         
-                        // Simulate redirect to customization page
-                        setTimeout(() => {
-                            alert('Your website has been generated! Redirecting to customization...');
-                        }, 2000);
+                        // Generate preview from processing result
+                        handlePreviewGeneration(result);
+                        
+                        // Note: Removed the automatic redirect alert since we now show preview
                     } else {
                         throw new Error(result?.message || 'Processing failed');
                     }
@@ -550,10 +695,10 @@ export default function DoctorAudioUpload() {
                         setProcessingResult(result);
                         setIsProcessing(false);
                         
-                        // Simulate redirect to customization page
-                        setTimeout(() => {
-                            alert('Your website has been generated! Redirecting to customization...');
-                        }, 2000);
+                        // Generate preview from processing result
+                        handlePreviewGeneration(result);
+                        
+                        // Note: Removed the automatic redirect alert since we now show preview
                     } else {
                         throw new Error(result?.message || 'Processing failed');
                     }
@@ -659,6 +804,34 @@ export default function DoctorAudioUpload() {
         checkRecordingSupport();
     }, []);
 
+    // Fetch website data after successful AI processing
+    useEffect(() => {
+        if (processingResult?.data?.websiteId) {
+            const fetchWebsiteData = async () => {
+                try {
+                    console.log('Fetching website data from backend...');
+                    const response = await apiService.getPreviewData(
+                        processingResult.data.websiteId,
+                        { deviceType: 'desktop', zoom: 100 }
+                    );
+                    
+                    setWebsiteId(processingResult.data.websiteId);
+                    setWebsiteData(response.data);
+                    setPreviewData(response.data);
+                    console.log('Website data fetched successfully');
+                } catch (error) {
+                    console.error('Failed to fetch website data:', error);
+                    setPreviewError('Failed to load website data: ' + apiService.handleAPIError(error));
+                    
+                    // Fallback to local data processing
+                    handlePreviewGeneration(processingResult);
+                }
+            };
+
+            fetchWebsiteData();
+        }
+    }, [processingResult]);
+
     return (
         <div className="doctor-audio-upload min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
             {/* Header */}
@@ -740,15 +913,36 @@ export default function DoctorAudioUpload() {
                     )}
 
                     {/* Success Result */}
-                    {processingResult && !isProcessing && (
+                    {processingResult && !isProcessing && showPreview && (
                         <div className="bg-green-50 border-b border-green-200 px-6 py-4">
-                            <div className="flex items-center space-x-3">
-                                <CheckCircle className="w-5 h-5 text-green-600" />
-                                <div>
-                                    <h3 className="text-sm font-medium text-green-800">Processing Complete!</h3>
-                                    <p className="text-sm text-green-700">
-                                        Your website has been generated successfully. Redirecting to customization...
-                                    </p>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                    <CheckCircle className="w-5 h-5 text-green-600" />
+                                    <div>
+                                        <h3 className="text-sm font-medium text-green-800">Website Generated Successfully!</h3>
+                                        <p className="text-sm text-green-700">
+                                            Your website preview is ready. Review it below and continue to customization.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <button
+                                        onClick={handleShowContentManager}
+                                        className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        <Edit3 className="w-4 h-4" />
+                                        <span className="text-sm font-medium">Edit Content</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            // Simulate navigation to customization
+                                            alert('Proceeding to customization phase...');
+                                        }}
+                                        className="inline-flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                    >
+                                        <span className="text-sm font-medium">Continue to Customization</span>
+                                        <ArrowRight className="w-4 h-4" />
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1031,11 +1225,53 @@ My clinic is located in downtown Springfield, and I offer both in-person and tel
                     </div>
                 )}
 
+                {/* Website Preview */}
+                {showPreview && previewData && (
+                    <div className="mt-8">
+                        <WebsitePreview
+                            websiteData={previewData}
+                            websiteId={websiteId}
+                            error={previewError}
+                            onRefresh={handlePreviewRefresh}
+                            className="shadow-lg"
+                        />
+                    </div>
+                )}
+
                 {/* Footer Note */}
                 <div className="text-center mt-8 text-sm text-gray-500">
                     <p>🔒 Your data is secure and HIPAA-compliant • ⚡ AI processing takes 30-60 seconds</p>
                 </div>
             </div>
+
+            {/* Content Manager Modal */}
+            {showContentManager && processingResult && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
+                        <div className="border-b border-gray-200 p-4">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-semibold text-gray-900">Content Management</h2>
+                                <button
+                                    onClick={handleCloseContentManager}
+                                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-4 overflow-auto" style={{ maxHeight: 'calc(95vh - 80px)' }}>
+                            <ContentManager
+                                websiteData={websiteData || processingResult.data}
+                                websiteId={websiteId}
+                                onSave={handleContentSave}
+                                onPreview={handlePreviewRefresh}
+                                onContentChange={handleContentChange}
+                                onSectionUpdate={handleSectionUpdate}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

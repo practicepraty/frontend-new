@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AlertCircle, RefreshCw, Maximize2, Monitor, Tablet, Smartphone } from 'lucide-react';
 import LoadingSkeleton from './LoadingSkeleton.jsx';
+import apiService from '../utils/api.js';
 
 export default function WebsitePreview({ 
     websiteData, 
+    websiteId,
     isLoading = false, 
     error = null, 
     onRefresh, 
@@ -218,7 +220,7 @@ export default function WebsitePreview({
                 setIframeLoading(false);
             }
         }
-    }, [websiteData]);
+    }, [websiteData, generatePreviewHTML]);
 
     // Handle section highlighting
     useEffect(() => {
@@ -251,11 +253,29 @@ export default function WebsitePreview({
     };
 
     // Handle refresh
-    const handleRefresh = () => {
+    const handleRefresh = async () => {
         if (onRefresh) {
             onRefresh();
+        } else if (websiteId) {
+            // Refresh from backend
+            setIframeLoading(true);
+            try {
+                const response = await apiService.generatePreview(websiteId, {
+                    deviceType: currentView,
+                    zoom: zoomLevel
+                });
+                
+                if (response.success && iframeRef.current) {
+                    const html = response.data.html || generatePreviewHTML();
+                    iframeRef.current.srcdoc = html;
+                }
+            } catch (error) {
+                console.error('Failed to refresh preview from backend:', error);
+                setIframeError('Failed to refresh preview: ' + apiService.handleAPIError(error));
+                setIframeLoading(false);
+            }
         } else {
-            // Reload iframe content
+            // Reload iframe content locally
             if (iframeRef.current && websiteData) {
                 setIframeLoading(true);
                 const html = generatePreviewHTML();

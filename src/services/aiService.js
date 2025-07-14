@@ -1,5 +1,6 @@
 import apiService from '../utils/api.js';
 import websocketService from './websocketService.js';
+import regenerationService from './regenerationService.js';
 
 class AIService {
     constructor() {
@@ -573,6 +574,35 @@ class AIService {
             isValid: errors.length === 0,
             errors
         };
+    }
+
+    // Content regeneration methods
+    async regenerateContent(sectionId, currentContent, prompt, options = {}) {
+        return await regenerationService.regenerateContent(sectionId, currentContent, prompt, options);
+    }
+
+    async improveContent(content, improvementType, options = {}) {
+        return await regenerationService.improveContent(content, improvementType, options);
+    }
+
+    async generateVariations(content, count = 3, options = {}) {
+        return await regenerationService.generateVariations(content, count, options);
+    }
+
+    async analyzeContent(content, options = {}) {
+        return await regenerationService.analyzeContent(content, options);
+    }
+
+    async optimizeForSpecialty(content, specialty, options = {}) {
+        return await regenerationService.optimizeForSpecialty(content, specialty, options);
+    }
+
+    async generateSectionContent(sectionType, practiceInfo, options = {}) {
+        return await regenerationService.generateSectionContent(sectionType, practiceInfo, options);
+    }
+
+    getContentSuggestions(sectionType, specialty = 'general') {
+        return regenerationService.getContentSuggestions(sectionType, specialty);
     }
 }
 

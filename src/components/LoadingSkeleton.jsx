@@ -81,5 +81,102 @@ const ProgressSkeleton = ({ className = "" }) => {
     );
 };
 
-export { LoadingSkeleton, CardSkeleton, ButtonSkeleton, ProgressSkeleton };
+const PreviewSkeleton = ({ className = "" }) => {
+    return (
+        <div className={`bg-white rounded-xl border border-gray-200 overflow-hidden animate-pulse ${className}`}>
+            {/* Header skeleton */}
+            <div className="border-b border-gray-200 p-4">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                        <div className="bg-gray-300 h-5 w-5 rounded"></div>
+                        <div className="bg-gray-300 h-5 rounded w-32"></div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <div className="bg-gray-300 h-8 w-8 rounded-lg"></div>
+                        <div className="bg-gray-300 h-8 w-8 rounded-lg"></div>
+                    </div>
+                </div>
+                
+                {/* Controls skeleton */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
+                        {Array.from({ length: 3 }).map((_, index) => (
+                            <div key={index} className="bg-gray-300 h-8 w-20 rounded-md"></div>
+                        ))}
+                    </div>
+                    <div className="bg-gray-300 h-8 w-24 rounded-md"></div>
+                </div>
+            </div>
+            
+            {/* Preview content skeleton */}
+            <div className="bg-gray-50 p-4">
+                <div className="mx-auto bg-white rounded-lg border border-gray-200 overflow-hidden" style={{ maxWidth: '1200px', height: '600px' }}>
+                    {/* Website header skeleton */}
+                    <div className="bg-gray-300 h-16 w-full"></div>
+                    
+                    {/* Hero section skeleton */}
+                    <div className="bg-gray-200 h-40 w-full flex items-center justify-center">
+                        <div className="text-center space-y-3">
+                            <div className="bg-gray-300 h-8 w-80 rounded mx-auto"></div>
+                            <div className="bg-gray-300 h-4 w-60 rounded mx-auto"></div>
+                            <div className="bg-gray-300 h-10 w-32 rounded mx-auto"></div>
+                        </div>
+                    </div>
+                    
+                    {/* Content sections skeleton */}
+                    <div className="p-8 space-y-8">
+                        {/* About section */}
+                        <div className="space-y-4">
+                            <div className="bg-gray-300 h-6 w-48 rounded mx-auto"></div>
+                            <div className="space-y-2">
+                                <div className="bg-gray-300 h-4 w-full rounded"></div>
+                                <div className="bg-gray-300 h-4 w-5/6 rounded"></div>
+                                <div className="bg-gray-300 h-4 w-4/6 rounded"></div>
+                            </div>
+                        </div>
+                        
+                        {/* Services section */}
+                        <div className="space-y-4">
+                            <div className="bg-gray-300 h-6 w-40 rounded mx-auto"></div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {Array.from({ length: 3 }).map((_, index) => (
+                                    <div key={index} className="bg-gray-100 p-4 rounded-lg space-y-2">
+                                        <div className="bg-gray-300 h-5 w-3/4 rounded"></div>
+                                        <div className="bg-gray-300 h-4 w-full rounded"></div>
+                                        <div className="bg-gray-300 h-4 w-5/6 rounded"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        {/* Contact section */}
+                        <div className="space-y-4">
+                            <div className="bg-gray-300 h-6 w-44 rounded mx-auto"></div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {Array.from({ length: 2 }).map((_, index) => (
+                                    <div key={index} className="bg-gray-100 p-4 rounded-lg space-y-2">
+                                        <div className="bg-gray-300 h-4 w-1/2 rounded"></div>
+                                        <div className="bg-gray-300 h-4 w-3/4 rounded"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Section controls skeleton */}
+            <div className="border-t border-gray-200 p-4">
+                <div className="flex items-center space-x-2">
+                    <div className="bg-gray-300 h-4 w-24 rounded"></div>
+                    {Array.from({ length: 6 }).map((_, index) => (
+                        <div key={index} className="bg-gray-300 h-6 w-16 rounded-full"></div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export { LoadingSkeleton, CardSkeleton, ButtonSkeleton, ProgressSkeleton, PreviewSkeleton };
 export default LoadingSkeleton;

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8005';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8003';
 
 class ApiService {
     constructor() {
@@ -171,6 +171,100 @@ class ApiService {
         });
     }
 
+    // Website and Content Management APIs
+    async getWebsiteData(websiteId) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}`);
+    }
+
+    async getPreviewData(websiteId, options = {}) {
+        const params = new URLSearchParams();
+        if (options.deviceType) params.append('deviceType', options.deviceType);
+        if (options.zoom) params.append('zoom', options.zoom);
+        
+        const queryString = params.toString();
+        const endpoint = `/api/v1/websites/${websiteId}/preview${queryString ? '?' + queryString : ''}`;
+        
+        return this.makeRequest(endpoint);
+    }
+
+    async updateContentSection(websiteId, sectionId, content) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}/sections/${sectionId}`, {
+            method: 'PUT',
+            body: { content }
+        });
+    }
+
+    async updateContent(websiteId, content) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}/content`, {
+            method: 'PUT',
+            body: { content }
+        });
+    }
+
+    async saveWebsite(websiteId, data) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}/save`, {
+            method: 'POST',
+            body: data
+        });
+    }
+
+    async regenerateContent(websiteId, sectionId, options = {}) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}/sections/${sectionId}/regenerate`, {
+            method: 'POST',
+            body: options
+        });
+    }
+
+    async analyzeContent(websiteId, content, options = {}) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}/analyze`, {
+            method: 'POST',
+            body: { content, options }
+        });
+    }
+
+    async uploadImage(websiteId, file, options = {}) {
+        const formData = new FormData();
+        formData.append('image', file);
+        
+        if (options.crop) {
+            formData.append('crop', JSON.stringify(options.crop));
+        }
+        if (options.optimize) {
+            formData.append('optimize', JSON.stringify(options.optimize));
+        }
+
+        return this.makeRequest(`/api/v1/websites/${websiteId}/images`, {
+            method: 'POST',
+            body: formData,
+            isFormData: true
+        });
+    }
+
+    async getWebsiteSettings(websiteId) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}/settings`);
+    }
+
+    async updateWebsiteSettings(websiteId, settings) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}/settings`, {
+            method: 'PUT',
+            body: settings
+        });
+    }
+
+    async generatePreview(websiteId, options = {}) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}/preview/generate`, {
+            method: 'POST',
+            body: options
+        });
+    }
+
+    async validateContent(websiteId, content) {
+        return this.makeRequest(`/api/v1/websites/${websiteId}/validate`, {
+            method: 'POST',
+            body: { content }
+        });
+    }
+
     getErrorMessage(error) {
         if (error.data?.message) {
             return error.data.message;
@@ -201,6 +295,24 @@ class ApiService {
         }
         
         return error.message || 'An unexpected error occurred. Please try again.';
+    }
+
+    // Enhanced error handling for frontend-backend integration
+    handleAPIError(error) {
+        if (error.status === 401) {
+            // Redirect to login
+            window.location.href = '/auth';
+            return 'Authentication required. Redirecting to login...';
+        } else if (error.status === 403) {
+            return 'You do not have permission to perform this action';
+        } else if (error.status === 404) {
+            return 'The requested resource was not found';
+        } else if (error.status === 429) {
+            return 'Too many requests. Please try again later.';
+        } else if (error.status >= 500) {
+            return 'Server error. Please try again later.';
+        }
+        return error.message || 'An unexpected error occurred';
     }
 }
 

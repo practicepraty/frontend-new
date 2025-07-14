@@ -1,5 +1,5 @@
 // Simple API test without CSRF
-const API_BASE_URL = 'http://localhost:8002';
+const API_BASE_URL = 'http://localhost:8003';
 
 async function testSimpleAPI() {
     console.log('🧪 Testing API endpoints without CSRF...\n');
