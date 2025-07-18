@@ -9,7 +9,7 @@ export default function WebsitePreview({
     isLoading = false, 
     error = null, 
     onRefresh, 
-    className = "" 
+    className = ""
 }) {
     const [currentView, setCurrentView] = useState('desktop');
     const [zoomLevel, setZoomLevel] = useState(100);
@@ -17,6 +17,8 @@ export default function WebsitePreview({
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [iframeLoading, setIframeLoading] = useState(true);
     const [iframeError, setIframeError] = useState(null);
+    const [fetchedHTML, setFetchedHTML] = useState(null);
+    const [isFetchingHTML, setIsFetchingHTML] = useState(false);
     
     const iframeRef = useRef(null);
     const containerRef = useRef(null);
@@ -29,6 +31,76 @@ export default function WebsitePreview({
     };
 
     const zoomLevels = [50, 75, 100, 125, 150];
+
+    // Fetch HTML content from API endpoint
+    const fetchHTMLFromAPI = async (options = {}) => {
+        if (!websiteId) {
+            console.log('No websiteId provided, cannot fetch HTML from API');
+            return null;
+        }
+
+        setIsFetchingHTML(true);
+        setIframeError(null);
+
+        try {
+            console.log('Fetching HTML from API endpoint...');
+            
+            // Try HTML endpoint first
+            let htmlContent = null;
+            try {
+                const htmlResponse = await apiService.getPreviewHTML(websiteId, {
+                    deviceType: options.deviceType || currentView,
+                    zoom: options.zoom || zoomLevel
+                });
+                htmlContent = htmlResponse.html;
+                console.log('Successfully fetched HTML from dedicated endpoint');
+            } catch (htmlError) {
+                console.log('Dedicated HTML endpoint failed, trying format parameter:', htmlError);
+                
+                try {
+                    const formatResponse = await apiService.getPreviewHTMLWithFormat(websiteId, {
+                        deviceType: options.deviceType || currentView,
+                        zoom: options.zoom || zoomLevel
+                    });
+                    htmlContent = formatResponse;
+                    console.log('Successfully fetched HTML with format parameter');
+                } catch (formatError) {
+                    console.log('Format parameter failed, trying JSON endpoint:', formatError);
+                    
+                    try {
+                        const jsonResponse = await apiService.getPreviewData(websiteId, {
+                            deviceType: options.deviceType || currentView,
+                            zoom: options.zoom || zoomLevel
+                        });
+                        
+                        if (jsonResponse.success && jsonResponse.data.html) {
+                            htmlContent = jsonResponse.data.html;
+                            console.log('Successfully fetched HTML from JSON endpoint');
+                        } else {
+                            throw new Error('No HTML content in JSON response');
+                        }
+                    } catch (jsonError) {
+                        console.log('All API endpoints failed, will use local generation:', jsonError);
+                        throw jsonError;
+                    }
+                }
+            }
+
+            if (htmlContent) {
+                console.log('Fetched HTML content length:', htmlContent.length);
+                setFetchedHTML(htmlContent);
+                setIsFetchingHTML(false);
+                return htmlContent;
+            } else {
+                throw new Error('No HTML content received from any endpoint');
+            }
+        } catch (error) {
+            console.error('Failed to fetch HTML from API:', error);
+            setIframeError('Failed to fetch preview: ' + error.message);
+            setIsFetchingHTML(false);
+            return null;
+        }
+    };
 
     // Generate preview HTML from website data
     const generatePreviewHTML = () => {
@@ -196,31 +268,70 @@ export default function WebsitePreview({
 
     // Handle iframe load events
     const handleIframeLoad = () => {
+        console.log('Iframe onLoad event fired');
         setIframeLoading(false);
         setIframeError(null);
     };
 
-    const handleIframeError = () => {
+    const handleIframeError = (error) => {
+        console.error('Iframe onError event fired:', error);
         setIframeLoading(false);
         setIframeError('Failed to load preview');
     };
 
     // Update iframe content when website data changes
     useEffect(() => {
-        if (iframeRef.current && websiteData) {
+        if (iframeRef.current) {
+            console.log('Updating iframe content...');
             setIframeLoading(true);
-            const html = generatePreviewHTML();
+            setIframeError(null);
+            
             const iframe = iframeRef.current;
             
-            try {
-                iframe.srcdoc = html;
-            } catch (error) {
-                console.error('Error setting iframe content:', error);
-                setIframeError('Failed to render preview');
-                setIframeLoading(false);
+            // Try to fetch HTML from API first if websiteId is available
+            if (websiteId) {
+                console.log('WebsiteId available, attempting to fetch HTML from API');
+                fetchHTMLFromAPI().then(htmlContent => {
+                    if (htmlContent) {
+                        console.log('Using fetched HTML content for iframe srcdoc');
+                        iframe.srcdoc = htmlContent;
+                        setIframeLoading(false);
+                    } else {
+                        // Fallback to local generation
+                        console.log('API fetch failed, falling back to local generation');
+                        fallbackToLocalGeneration();
+                    }
+                }).catch(error => {
+                    console.log('API fetch error, falling back to local generation:', error);
+                    fallbackToLocalGeneration();
+                });
+            } else {
+                // No websiteId, use local generation
+                console.log('No websiteId, using local generation');
+                fallbackToLocalGeneration();
+            }
+            
+            function fallbackToLocalGeneration() {
+                if (websiteData) {
+                    const html = generatePreviewHTML();
+                    console.log('Generated HTML length:', html.length);
+                    console.log('First 500 chars of HTML:', html.substring(0, 500));
+                    
+                    try {
+                        iframe.srcdoc = html;
+                        setIframeLoading(false);
+                    } catch (error) {
+                        console.error('Error setting iframe content:', error);
+                        setIframeError('Failed to render preview: ' + error.message);
+                        setIframeLoading(false);
+                    }
+                } else {
+                    console.log('No websiteData available for local generation');
+                    setIframeLoading(false);
+                }
             }
         }
-    }, [websiteData, generatePreviewHTML]);
+    }, [websiteData, currentView, zoomLevel, websiteId]);
 
     // Handle section highlighting
     useEffect(() => {
@@ -257,17 +368,15 @@ export default function WebsitePreview({
         if (onRefresh) {
             onRefresh();
         } else if (websiteId) {
-            // Refresh from backend
+            // Refresh from backend using HTML endpoint
             setIframeLoading(true);
             try {
-                const response = await apiService.generatePreview(websiteId, {
-                    deviceType: currentView,
-                    zoom: zoomLevel
-                });
-                
-                if (response.success && iframeRef.current) {
-                    const html = response.data.html || generatePreviewHTML();
-                    iframeRef.current.srcdoc = html;
+                const htmlContent = await fetchHTMLFromAPI();
+                if (htmlContent && iframeRef.current) {
+                    iframeRef.current.srcdoc = htmlContent;
+                    setIframeLoading(false);
+                } else {
+                    throw new Error('No HTML content received');
                 }
             } catch (error) {
                 console.error('Failed to refresh preview from backend:', error);
@@ -280,6 +389,7 @@ export default function WebsitePreview({
                 setIframeLoading(true);
                 const html = generatePreviewHTML();
                 iframeRef.current.srcdoc = html;
+                setIframeLoading(false);
             }
         }
     };
@@ -457,8 +567,9 @@ export default function WebsitePreview({
                         }}
                         onLoad={handleIframeLoad}
                         onError={handleIframeError}
-                        sandbox="allow-scripts allow-same-origin"
+                        sandbox="allow-scripts allow-same-origin allow-forms"
                         title="Website Preview"
+                        srcdoc={fetchedHTML || generatePreviewHTML()}
                     />
                 </div>
             </div>

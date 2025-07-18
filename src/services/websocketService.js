@@ -6,10 +6,26 @@ class WebSocketService {
         this.reconnectInterval = 1000;
         this.listeners = new Map();
         this.connectionState = 'disconnected';
-        this.baseUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8003';
+        
+        // Multi-port WebSocket configuration
+        this.baseUrls = [
+            import.meta.env.VITE_WS_BASE_URL_8000 || 'ws://localhost:8000',
+            import.meta.env.VITE_WS_BASE_URL_8001 || 'ws://localhost:8001',
+            import.meta.env.VITE_WS_BASE_URL_8002 || 'ws://localhost:8002',
+            import.meta.env.VITE_WS_BASE_URL_8003 || 'ws://localhost:8003',
+            import.meta.env.VITE_WS_BASE_URL_8004 || 'ws://localhost:8004'
+        ];
+        this.baseUrl = import.meta.env.VITE_WS_BASE_URL || this.baseUrls[0];
+        this.currentUrlIndex = 0;
     }
 
-    connect(requestId) {
+    tryNextUrl() {
+        this.currentUrlIndex = (this.currentUrlIndex + 1) % this.baseUrls.length;
+        this.baseUrl = this.baseUrls[this.currentUrlIndex];
+        console.log(`Switching to WebSocket URL: ${this.baseUrl}`);
+    }
+
+    connect(requestId, urlAttempt = 0) {
         return new Promise((resolve, reject) => {
             try {
                 if (this.ws?.readyState === WebSocket.OPEN) {
@@ -49,6 +65,15 @@ class WebSocketService {
                     this.connectionState = 'error';
                     this.emit('connectionStateChange', 'error');
                     console.error('WebSocket error:', error);
+                    
+                    // Try next port if available
+                    if (urlAttempt < this.baseUrls.length - 1) {
+                        console.log(`WebSocket connection failed, trying next port... (${urlAttempt + 1}/${this.baseUrls.length})`);
+                        this.tryNextUrl();
+                        this.connect(requestId, urlAttempt + 1).then(resolve).catch(reject);
+                        return;
+                    }
+                    
                     reject(error);
                 };
 

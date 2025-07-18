@@ -1,9 +1,20 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8003';
+// Multi-port fallback configuration for backend connectivity
+const API_BASE_URLS = [
+    import.meta.env.VITE_API_BASE_URL_8000 || 'http://localhost:8000',
+    import.meta.env.VITE_API_BASE_URL_8001 || 'http://localhost:8001',
+    import.meta.env.VITE_API_BASE_URL_8002 || 'http://localhost:8002',
+    import.meta.env.VITE_API_BASE_URL_8003 || 'http://localhost:8003',
+    import.meta.env.VITE_API_BASE_URL_8004 || 'http://localhost:8004'
+];
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_BASE_URLS[0];
 
 class ApiService {
     constructor() {
         this.csrfToken = null;
         this.baseURL = API_BASE_URL;
+        this.fallbackURLs = API_BASE_URLS;
+        this.currentURLIndex = 0;
     }
 
     async fetchCSRFToken() {
@@ -24,8 +35,14 @@ class ApiService {
         return null;
     }
 
+    async tryNextURL() {
+        this.currentURLIndex = (this.currentURLIndex + 1) % this.fallbackURLs.length;
+        this.baseURL = this.fallbackURLs[this.currentURLIndex];
+        console.log(`Switching to backend URL: ${this.baseURL}`);
+    }
+
     async makeRequest(endpoint, options = {}) {
-        const { method = 'GET', body, headers = {}, isFormData = false, retries = 0 } = options;
+        const { method = 'GET', body, headers = {}, isFormData = false, retries = 0, expectHtml = false, urlRetries = 0 } = options;
         
         if (!this.csrfToken && method !== 'GET') {
             await this.fetchCSRFToken();
@@ -66,7 +83,9 @@ class ApiService {
             const contentType = response.headers.get('content-type');
             
             try {
-                if (contentType && contentType.includes('application/json')) {
+                if (expectHtml || (contentType && contentType.includes('text/html'))) {
+                    data = await response.text();
+                } else if (contentType && contentType.includes('application/json')) {
                     data = await response.json();
                 } else {
                     const text = await response.text();
@@ -105,6 +124,13 @@ class ApiService {
             return data;
         } catch (error) {
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                // Try different backend ports before giving up
+                if (urlRetries < this.fallbackURLs.length - 1) {
+                    console.warn(`Connection failed to ${this.baseURL}, trying next port... (${urlRetries + 1}/${this.fallbackURLs.length})`);
+                    await this.tryNextURL();
+                    return this.makeRequest(endpoint, { ...options, urlRetries: urlRetries + 1, retries: 0 });
+                }
+                
                 const networkError = new Error('Network error. Please check your internet connection and try again.');
                 networkError.status = 0;
                 networkError.data = { message: 'Network connection failed', retryable: true };
@@ -180,11 +206,54 @@ class ApiService {
         const params = new URLSearchParams();
         if (options.deviceType) params.append('deviceType', options.deviceType);
         if (options.zoom) params.append('zoom', options.zoom);
+        if (options.format) params.append('format', options.format);
         
         const queryString = params.toString();
         const endpoint = `/api/v1/websites/${websiteId}/preview${queryString ? '?' + queryString : ''}`;
         
         return this.makeRequest(endpoint);
+    }
+
+    async getPreviewHTML(websiteId, options = {}) {
+        const params = new URLSearchParams();
+        if (options.deviceType) params.append('deviceType', options.deviceType);
+        if (options.zoom) params.append('zoom', options.zoom);
+        
+        const queryString = params.toString();
+        const endpoint = `/api/v1/websites/${websiteId}/preview/html${queryString ? '?' + queryString : ''}`;
+        
+        try {
+            const response = await fetch(`${this.baseURL}${endpoint}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'text/html',
+                    ...(this.csrfToken && { 'X-CSRF-Token': this.csrfToken })
+                },
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const html = await response.text();
+            return { success: true, html };
+        } catch (error) {
+            console.error('Failed to fetch preview HTML:', error);
+            throw error;
+        }
+    }
+
+    async getPreviewHTMLWithFormat(websiteId, options = {}) {
+        const params = new URLSearchParams();
+        if (options.deviceType) params.append('deviceType', options.deviceType);
+        if (options.zoom) params.append('zoom', options.zoom);
+        params.append('format', 'html');
+        
+        const queryString = params.toString();
+        const endpoint = `/api/v1/websites/${websiteId}/preview?${queryString}`;
+        
+        return this.makeRequest(endpoint, { expectHtml: true });
     }
 
     async updateContentSection(websiteId, sectionId, content) {

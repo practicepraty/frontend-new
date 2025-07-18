@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:backend": "node test-backend-integration.js",
+    "test:firefox": "node test-firefox-fix.js",
+    "test:port": "node test-port-config.js"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.8.2",

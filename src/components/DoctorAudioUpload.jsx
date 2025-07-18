@@ -1,12 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Upload, FileText, Play, Pause, RotateCcw, Send, Stethoscope, Sparkles, AlertCircle, CheckCircle, ArrowRight, Edit3, X } from 'lucide-react';
+import { Mic, Upload, FileText, Play, Pause, RotateCcw, Send, Stethoscope, Sparkles, AlertCircle, CheckCircle, ArrowRight } from 'lucide-react';
 import AIProgressIndicator from './AIProgressIndicator.jsx';
 import ProcessingStatusIndicator from './ProcessingStatusIndicator.jsx';
 import WebsitePreview from './WebsitePreview.jsx';
-import ContentManager from './ContentManager.jsx';
 import aiService from '../services/aiService.js';
 import previewService from '../services/previewService.js';
-import contentService from '../services/contentService.js';
 import apiService from '../utils/api.js';
 import { formatProcessingResultForPreview } from '../utils/previewUtils.js';
 
@@ -26,13 +24,10 @@ export default function DoctorAudioUpload() {
     const [audioLevel, setAudioLevel] = useState(0);
     const [_isRecordingSupported, setIsRecordingSupported] = useState(true);
     const [audioUrl, setAudioUrl] = useState(null);
-    const [showPreview, setShowPreview] = useState(false);
-    const [previewData, setPreviewData] = useState(null);
     const [previewError, setPreviewError] = useState(null);
-    const [showContentManager, setShowContentManager] = useState(false);
-    const [contentData, setContentData] = useState(null);
     const [websiteId, setWebsiteId] = useState(null);
     const [websiteData, setWebsiteData] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
 
     const fileInputRef = useRef(null);
     const audioRef = useRef(null);
@@ -376,137 +371,85 @@ export default function DoctorAudioUpload() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const handlePreviewGeneration = (processingResult) => {
+    const loadWebsiteData = async (id) => {
         try {
-            // Format the processing result for preview
-            const formattedData = formatProcessingResultForPreview(processingResult);
-            
-            if (formattedData) {
-                // Use previewService to further format the data
-                const previewData = previewService.formatWebsiteData(formattedData);
-                
-                console.log('Generated preview data:', previewData);
-                setPreviewData(previewData);
-                setShowPreview(true);
-                setPreviewError(null);
-            } else {
-                console.error('Failed to format processing result for preview');
-                setPreviewError('Failed to generate preview from processing result');
+            setIsLoading(true);
+            const response = await apiService.getWebsiteData(id);
+            if (response.success) {
+                const formattedData = previewService.formatWebsiteData(response.data);
+                setWebsiteData(formattedData);
             }
         } catch (error) {
-            console.error('Error generating preview:', error);
-            setPreviewError('Error generating website preview: ' + error.message);
+            console.error('Failed to load website data:', error);
+            setPreviewError('Failed to load website data');
+        } finally {
+            setIsLoading(false);
         }
     };
+
+    const handleProcessingComplete = (result) => {
+        console.log('Processing complete:', result);
+        
+        if (result.success && result.data) {
+            // Extract websiteId from the response - it's at result.data.websiteId
+            const extractedWebsiteId = result.data.websiteId;
+            console.log('Extracted websiteId:', extractedWebsiteId);
+            
+            if (extractedWebsiteId) {
+                setWebsiteId(extractedWebsiteId);
+                // Store in localStorage for persistence
+                localStorage.setItem('currentWebsiteId', extractedWebsiteId);
+            }
+            
+            // Format and set the website data
+            const formattedData = previewService.formatWebsiteData(result.data);
+            setWebsiteData(formattedData);
+            
+            // Clear any previous errors
+            setProcessingError(null);
+            
+            // Switch to preview tab after a delay
+            setTimeout(() => {
+                setActiveTab('preview');
+            }, 1500);
+        } else {
+            // Handle error case
+            console.error('Processing failed:', result.error);
+            setProcessingError(result.error || 'Processing failed');
+        }
+    };
+
 
     const handlePreviewRefresh = async () => {
         if (websiteId) {
             try {
                 console.log('Refreshing preview from backend...');
-                const response = await apiService.getPreviewData(websiteId, { 
-                    deviceType: 'desktop', 
-                    zoom: 100 
-                });
-                setPreviewData(response.data);
-                setPreviewError(null);
+                
+                // Try to get structured data first for content management
+                try {
+                    const response = await apiService.getPreviewData(websiteId, { 
+                        deviceType: 'desktop', 
+                        zoom: 100 
+                    });
+                    
+                    // Transform API response to expected format
+                    const formattedData = previewService.formatWebsiteData(response.data);
+                    setWebsiteData(formattedData);
+                    setPreviewError(null);
+                    console.log('Preview refreshed successfully with structured data:', formattedData);
+                } catch (structuredError) {
+                    console.log('Structured data fetch failed, will use HTML endpoint for preview:', structuredError);
+                    // Clear the error but keep existing websiteData if available
+                    setPreviewError(null);
+                }
             } catch (error) {
                 console.error('Error refreshing preview:', error);
                 setPreviewError('Error refreshing preview: ' + apiService.handleAPIError(error));
             }
-        } else if (processingResult && processingResult.data) {
-            try {
-                console.log('Refreshing preview from local data...');
-                handlePreviewGeneration(processingResult);
-            } catch (error) {
-                console.error('Error refreshing preview:', error);
-                setPreviewError('Error refreshing preview: ' + error.message);
-            }
         }
     };
 
-    // Content management handlers
-    const handleContentChange = async (updatedContent) => {
-        setContentData(updatedContent);
-        
-        // Update backend if websiteId exists
-        if (websiteId && updatedContent) {
-            try {
-                const websiteData = contentService.transformToWebsiteData(updatedContent);
-                await apiService.updateContent(websiteId, websiteData);
-                console.log('Content updated in backend');
-                
-                // Refresh preview
-                await handlePreviewRefresh();
-            } catch (error) {
-                console.error('Failed to update content in backend:', error);
-            }
-        } else if (updatedContent) {
-            // Fallback to local preview update
-            const websiteData = contentService.transformToWebsiteData(updatedContent);
-            const formattedData = formatProcessingResultForPreview({ data: websiteData });
-            if (formattedData) {
-                const previewData = previewService.formatWebsiteData(formattedData);
-                setPreviewData(previewData);
-            }
-        }
-    };
 
-    const handleContentSave = async (contentData) => {
-        try {
-            console.log('Saving content changes...');
-            
-            if (websiteId) {
-                // Save to backend
-                const websiteData = contentService.transformToWebsiteData(contentData);
-                await apiService.saveWebsite(websiteId, { content: websiteData });
-                console.log('Content saved to backend successfully');
-            } else {
-                // Fallback to local update
-                const websiteData = contentService.transformToWebsiteData(contentData);
-                setProcessingResult(prev => ({
-                    ...prev,
-                    data: websiteData
-                }));
-                console.log('Content saved locally');
-            }
-        } catch (error) {
-            console.error('Error saving content:', apiService.handleAPIError(error));
-            throw error;
-        }
-    };
-
-    const handleSectionUpdate = async (sectionId, content) => {
-        if (!websiteId) return;
-        
-        try {
-            const response = await apiService.updateContentSection(websiteId, sectionId, content);
-            
-            // Update local state
-            setWebsiteData(prev => ({
-                ...prev,
-                content: {
-                    ...prev.content,
-                    [sectionId]: response.data.content
-                }
-            }));
-            
-            // Trigger preview refresh
-            await handlePreviewRefresh();
-        } catch (error) {
-            console.error(`Failed to update ${sectionId} section:`, apiService.handleAPIError(error));
-            throw error;
-        }
-    };
-
-    const handleShowContentManager = () => {
-        if (processingResult && processingResult.data) {
-            setShowContentManager(true);
-        }
-    };
-
-    const handleCloseContentManager = () => {
-        setShowContentManager(false);
-    };
 
     const validateAudioFile = async (file) => {
         const errors = [];
@@ -639,10 +582,8 @@ export default function DoctorAudioUpload() {
                         setProcessingResult(result);
                         setIsProcessing(false);
                         
-                        // Generate preview from processing result
-                        handlePreviewGeneration(result);
-                        
-                        // Note: Removed the automatic redirect alert since we now show preview
+                        // Use the new handleProcessingComplete function
+                        handleProcessingComplete(result);
                     } else {
                         throw new Error(result?.message || 'Processing failed');
                     }
@@ -695,10 +636,8 @@ export default function DoctorAudioUpload() {
                         setProcessingResult(result);
                         setIsProcessing(false);
                         
-                        // Generate preview from processing result
-                        handlePreviewGeneration(result);
-                        
-                        // Note: Removed the automatic redirect alert since we now show preview
+                        // Use the new handleProcessingComplete function
+                        handleProcessingComplete(result);
                     } else {
                         throw new Error(result?.message || 'Processing failed');
                     }
@@ -804,6 +743,16 @@ export default function DoctorAudioUpload() {
         checkRecordingSupport();
     }, []);
 
+    // Check for existing websiteId on component mount
+    useEffect(() => {
+        const savedWebsiteId = localStorage.getItem('currentWebsiteId');
+        if (savedWebsiteId) {
+            setWebsiteId(savedWebsiteId);
+            // Optionally load the website data
+            loadWebsiteData(savedWebsiteId);
+        }
+    }, []);
+
     // Fetch website data after successful AI processing
     useEffect(() => {
         if (processingResult?.data?.websiteId) {
@@ -816,15 +765,20 @@ export default function DoctorAudioUpload() {
                     );
                     
                     setWebsiteId(processingResult.data.websiteId);
-                    setWebsiteData(response.data);
-                    setPreviewData(response.data);
-                    console.log('Website data fetched successfully');
+                    
+                    // Transform API response to expected format
+                    const formattedData = previewService.formatWebsiteData(response.data);
+                    setWebsiteData(formattedData);
+                    console.log('Website data fetched and formatted successfully:', formattedData);
                 } catch (error) {
                     console.error('Failed to fetch website data:', error);
                     setPreviewError('Failed to load website data: ' + apiService.handleAPIError(error));
                     
                     // Fallback to local data processing
-                    handlePreviewGeneration(processingResult);
+                    const formattedData = formatProcessingResultForPreview(processingResult);
+                    if (formattedData) {
+                        setWebsiteData(previewService.formatWebsiteData(formattedData));
+                    }
                 }
             };
 
@@ -892,6 +846,19 @@ export default function DoctorAudioUpload() {
                                     <span className="text-sm sm:text-base">Type Text</span>
                                 </div>
                             </button>
+                            <button
+                                onClick={() => handleTabSwitch('preview')}
+                                disabled={isProcessing || !websiteData}
+                                className={`flex-1 px-3 sm:px-6 py-3 sm:py-4 text-center font-medium transition-all duration-200 ${activeTab === 'preview'
+                                    ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
+                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                    } ${isProcessing || !websiteData ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                <div className="flex items-center justify-center space-x-1 sm:space-x-2">
+                                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    <span className="text-sm sm:text-base">Preview</span>
+                                </div>
+                            </button>
                         </div>
                     </div>
 
@@ -913,7 +880,7 @@ export default function DoctorAudioUpload() {
                     )}
 
                     {/* Success Result */}
-                    {processingResult && !isProcessing && showPreview && (
+                    {processingResult && !isProcessing && (
                         <div className="bg-green-50 border-b border-green-200 px-6 py-4">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-3">
@@ -921,17 +888,17 @@ export default function DoctorAudioUpload() {
                                     <div>
                                         <h3 className="text-sm font-medium text-green-800">Website Generated Successfully!</h3>
                                         <p className="text-sm text-green-700">
-                                            Your website preview is ready. Review it below and continue to customization.
+                                            Your website has been created. Use the Preview tab to review and edit your content.
                                         </p>
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <button
-                                        onClick={handleShowContentManager}
+                                        onClick={() => setActiveTab('preview')}
                                         className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                                     >
-                                        <Edit3 className="w-4 h-4" />
-                                        <span className="text-sm font-medium">Edit Content</span>
+                                        <CheckCircle className="w-4 h-4" />
+                                        <span className="text-sm font-medium">View Preview</span>
                                     </button>
                                     <button
                                         onClick={() => {
@@ -950,7 +917,7 @@ export default function DoctorAudioUpload() {
 
                     {/* Content Area */}
                     <div className="p-4 sm:p-6 lg:p-8">
-                        {activeTab === 'audio' ? (
+                        {activeTab === 'audio' && (
                             <div className="space-y-6">
                                 <div className="text-center">
                                     <h2 className="text-2xl font-bold text-gray-900 mb-2">
@@ -1125,7 +1092,9 @@ export default function DoctorAudioUpload() {
                                     </ul>
                                 </div>
                             </div>
-                        ) : (
+                        )}
+
+                        {activeTab === 'text' && (
                             <div className="space-y-6">
                                 <div className="text-center">
                                     <h2 className="text-2xl font-bold text-gray-900 mb-2">
@@ -1172,29 +1141,54 @@ My clinic is located in downtown Springfield, and I offer both in-person and tel
                             </div>
                         )}
 
-                        {/* Submit Button */}
-                        <div className="flex justify-center pt-8">
-                            <button
-                                onClick={handleSubmit}
-                                disabled={!canSubmit || isProcessing}
-                                className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 flex items-center space-x-3 ${canSubmit && !isProcessing
-                                    ? 'bg-gradient-to-r from-blue-600 to-green-600 text-white hover:from-blue-700 hover:to-green-700 shadow-lg hover:shadow-xl transform hover:scale-105'
-                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                    }`}
-                            >
-                                {isProcessing ? (
-                                    <>
-                                        <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        <span>Processing with AI...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Send className="w-6 h-6" />
-                                        <span>Generate My Website</span>
-                                    </>
-                                )}
-                            </button>
-                        </div>
+                        {activeTab === 'preview' && websiteData && (
+                            <div className="space-y-6">
+                                <WebsitePreview 
+                                    websiteData={websiteData}
+                                    websiteId={websiteId}  
+                                    isLoading={isLoading}
+                                    error={previewError}
+                                    onRefresh={handlePreviewRefresh}
+                                    className="h-[600px]"
+                                />
+                            </div>
+                        )}
+
+                        {activeTab === 'preview' && !websiteData && (
+                            <div className="text-center py-12">
+                                <div className="text-gray-500">
+                                    <CheckCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                                    <h3 className="text-lg font-medium mb-2">No Website Data</h3>
+                                    <p>Please process your audio or text input first to generate your website.</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Submit Button - Only show for audio and text tabs */}
+                        {activeTab !== 'preview' && (
+                            <div className="flex justify-center pt-8">
+                                <button
+                                    onClick={handleSubmit}
+                                    disabled={!canSubmit || isProcessing}
+                                    className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 flex items-center space-x-3 ${canSubmit && !isProcessing
+                                        ? 'bg-gradient-to-r from-blue-600 to-green-600 text-white hover:from-blue-700 hover:to-green-700 shadow-lg hover:shadow-xl transform hover:scale-105'
+                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        }`}
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            <span>Processing with AI...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="w-6 h-6" />
+                                            <span>Generate My Website</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -1225,18 +1219,6 @@ My clinic is located in downtown Springfield, and I offer both in-person and tel
                     </div>
                 )}
 
-                {/* Website Preview */}
-                {showPreview && previewData && (
-                    <div className="mt-8">
-                        <WebsitePreview
-                            websiteData={previewData}
-                            websiteId={websiteId}
-                            error={previewError}
-                            onRefresh={handlePreviewRefresh}
-                            className="shadow-lg"
-                        />
-                    </div>
-                )}
 
                 {/* Footer Note */}
                 <div className="text-center mt-8 text-sm text-gray-500">
@@ -1244,34 +1226,6 @@ My clinic is located in downtown Springfield, and I offer both in-person and tel
                 </div>
             </div>
 
-            {/* Content Manager Modal */}
-            {showContentManager && processingResult && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl max-h-[95vh] overflow-hidden">
-                        <div className="border-b border-gray-200 p-4">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-semibold text-gray-900">Content Management</h2>
-                                <button
-                                    onClick={handleCloseContentManager}
-                                    className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-                        </div>
-                        <div className="p-4 overflow-auto" style={{ maxHeight: 'calc(95vh - 80px)' }}>
-                            <ContentManager
-                                websiteData={websiteData || processingResult.data}
-                                websiteId={websiteId}
-                                onSave={handleContentSave}
-                                onPreview={handlePreviewRefresh}
-                                onContentChange={handleContentChange}
-                                onSectionUpdate={handleSectionUpdate}
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

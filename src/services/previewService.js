@@ -12,12 +12,16 @@ class PreviewService {
      * @returns {Object} Formatted website data for preview
      */
     formatWebsiteData(backendData) {
+        console.log('PreviewService: Formatting website data:', backendData);
+        
         if (!backendData) {
+            console.error('PreviewService: No website data provided');
             throw new Error('No website data provided');
         }
 
         // If the backend data is already in the expected format, return as-is
         if (this.isValidWebsiteData(backendData)) {
+            console.log('PreviewService: Data is already in valid format');
             return backendData;
         }
 
@@ -26,9 +30,17 @@ class PreviewService {
         
         // If data is nested under a 'data' or 'result' property
         if (backendData.data && typeof backendData.data === 'object') {
+            console.log('PreviewService: Extracting data from .data property');
             websiteData = backendData.data;
         } else if (backendData.result && typeof backendData.result === 'object') {
+            console.log('PreviewService: Extracting data from .result property');
             websiteData = backendData.result;
+        }
+        
+        // Handle nested website data
+        if (websiteData.website && typeof websiteData.website === 'object') {
+            console.log('PreviewService: Extracting data from .website property');
+            websiteData = websiteData.website;
         }
 
         // Extract and format the website structure
@@ -49,7 +61,9 @@ class PreviewService {
 
         // Validate the formatted data
         if (!this.isValidWebsiteData(formatted)) {
-            console.warn('Formatted website data may be incomplete:', formatted);
+            console.warn('PreviewService: Formatted website data may be incomplete:', formatted);
+        } else {
+            console.log('PreviewService: Successfully formatted website data:', formatted);
         }
 
         return formatted;
